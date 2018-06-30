@@ -53,6 +53,9 @@ if { $impl_flow == "CLOUD_BASE" } {
   set opt_route_directive [get_property STEPS.POST_ROUTE_PHYS_OPT_DESIGN.ARGS.DIRECTIVE [get_runs impl_1]]
 }
 
+## Temp For FX609
+  read_xdc $root_dir/setup/$fpgacard/capi_bsp_io.xdc >> $logfile
+  read_xdc $root_dir/setup/$fpgacard/capi_bsp_timing.xdc >> $logfile
 
 
 ##
@@ -90,6 +93,9 @@ if { ($vivadoVer >= "2017.4") && ($cloud_flow == "FALSE") } {
 
 }
 
+### Temp For FX609
+#  read_xdc $root_dir/setup/$fpgacard/capi_bsp_io.xdc >> $logfile
+#  read_xdc $root_dir/setup/$fpgacard/capi_bsp_timing.xdc >> $logfile
 
 ##
 ## placing design
@@ -123,9 +129,9 @@ if { [catch "$command > $logfile" errMsg] } {
   write_checkpoint   -force $dcp_dir/${step}.dcp          >> $logfile
 }
 
-## Temp For FX609
-  read_xdc $root_dir/setup/$fpgacard/capi_bsp_io.xdc >> $logfile
-  read_xdc $root_dir/setup/$fpgacard/capi_bsp_timing.xdc >> $logfile
+### Temp For FX609
+#  read_xdc $root_dir/setup/$fpgacard/capi_bsp_io.xdc >> $logfile
+#  read_xdc $root_dir/setup/$fpgacard/capi_bsp_timing.xdc >> $logfile
 
 ##
 ## physical optimizing design
