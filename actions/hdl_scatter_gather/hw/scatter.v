@@ -71,7 +71,7 @@ module scatter(
 
   parameter    AXI_DW               = 512             ,
                AXI_AW               = 64              ,
-               AXI_MIDW             = 4               ,
+               AXI_MIDW             = 1               ,
                AXI_SIDW             = 8               ;
 
   parameter    AXI_WID              = 0               ,
@@ -162,19 +162,27 @@ module scatter(
   reg                               reg_done          ;
   reg    [31                : 0]    reg_ac_addr0      ;
   reg    [31                : 0]    reg_ac_addr1      ;
+  reg    [1                 : 0]    reg_mode          ;
+  reg    [31                : 0]    reg_block_size    ;
+  reg    [31                : 0]    reg_block_num     ;
+  reg    [31                : 0]    reg_wb_addr0      ;
+  reg    [31                : 0]    reg_wb_addr1      ;
 
   reg    [1                 : 0]    cur_state         ;
   reg    [1                 : 0]    nxt_state         ;
   reg    [AXI_AW-1          : 0]    gen_m0_maddr      ;        
   reg                               gen_m0_mread      ;
-  reg    [7                 : 0]    ac_cnt            ;
-  reg    [1                 : 0]    read_cnt          ;
+  reg    [7                 : 0]    gen_m0_mlen       ;
+  reg    [11                : 0]    ac_cnt            ;
+  reg    [4                 : 0]    read_cnt          ;
   wire   [AXI_AW-1          : 0]    ac_addr           ;
+  wire   [4                 : 0]    ac_total_read     ;
 
   wire                              push_req_ac       ;
   wire                              pop_req_ac        ;
   wire                              empty_ac          ;
   wire   [AXI_AW-1          : 0]    data_out_ac       ;
+  wire   [AXI_DW-1          : 0]    push_data_ac      ;
 
 //*** MAIN ****************************************************************
 
@@ -202,14 +210,26 @@ module scatter(
     if( !axi_rstn ) begin
                           reg_ac_addr0    <= 'd0 ;
                           reg_ac_addr1    <= 'd0 ;
+						  reg_mode        <= 'd0 ;
+						  reg_block_size  <= 'd0 ;
+						  reg_block_num   <= 'd0 ;
+						  reg_wb_addr0    <= 'd0 ;
+						  reg_wb_addr1    <= 'd0 ;
     end
     else if(s_axi_awvalid & s_axi_awready) begin
       case(s_axi_awaddr[6:2])
         ADDR_AC_ADDR0   : reg_ac_addr0    <= s_axi_wdata ;
         ADDR_AC_ADDR1   : reg_ac_addr1    <= s_axi_wdata ;
+        ADDR_MODE       : reg_mode        <= s_axi_wdata[1:0] ;
+        ADDR_BLOCKSIZE  : reg_block_size  <= s_axi_wdata ;
+        ADDR_BLOCKNUM   : reg_block_num   <= s_axi_wdata ;
+        ADDR_WB_ADDR0   : reg_wb_addr0    <= s_axi_wdata ;
+        ADDR_WB_ADDR1   : reg_wb_addr1    <= s_axi_wdata ;
       endcase
     end
   end
+
+  assign ac_total_read = (reg_block_num - 1)/512;
 
   always @(*) begin
                         s_axi_rdata = 0              ;
@@ -282,7 +302,7 @@ module scatter(
                 nxt_state = LOAD_AC; 
               else
                 nxt_state = IDLE ;
-      LOAD_AC  :  if( ac_cnt == 'h80 )
+      LOAD_AC  :  if( ac_cnt == reg_block_num[13:3] )
                 nxt_state = LOAD_DATA ;
               else                    
                 nxt_state = LOAD_AC  ;
@@ -306,21 +326,20 @@ module scatter(
   assign gen_m0_mwstrb   = 64'hffff_ffff_ffff_ffff ;
   assign gen_m0_mdata    = 512'b0                  ;
   assign gen_m0_mwrite   = 0                       ;
-
-  assign gen_m0_msize    = (cur_state == LOAD_AC) ? 3'b110 : 3'b101 ;
-  assign gen_m0_mlen     = (cur_state == LOAD_AC) ?   'd63 : 'd31   ;
+  assign gen_m0_msize    = 3'b110                  ;
 
     fifo_512_64 fifo_ac(
       .rst              ( !axi_rstn         ),
       .clk              ( axi_clk           ),
-      .din              ( gen_m0_sdata      ),
+      .din              ( push_data_ac      ),
       .wr_en            ( push_req_ac       ),
       .rd_en            ( pop_req_ac        ),
       .dout             ( data_out_ac       ),
       .empty            ( empty_ac          )
     );
 
-    assign push_req_ac  = gen_m0_svalid & (gen_m0_sresp==0) & (cur_state == LOAD_AC);
+    assign push_data_ac = {gen_m0_sdata[63:0],gen_m0_sdata[127:64],gen_m0_sdata[191:128],gen_m0_sdata[255:192],gen_m0_sdata[319:256],gen_m0_sdata[383:320],gen_m0_sdata[447:384],gen_m0_sdata[511:448]};
+	assign push_req_ac  = gen_m0_svalid & (gen_m0_sresp==0) & (cur_state == LOAD_AC);
     assign pop_req_ac   = !empty_ac & gen_m0_saccept & gen_m0_mread & (cur_state == LOAD_DATA);
 
 	always@(posedge axi_clk or negedge axi_rstn)
@@ -338,10 +357,17 @@ module scatter(
   assign ac_addr = {reg_ac_addr0,reg_ac_addr1};
 
   always @(*) begin
-    if ( (cur_state == LOAD_AC) & (read_cnt == 2'b0) )
-        gen_m0_maddr = ac_addr;
-	else if (cur_state == LOAD_AC)
-	    gen_m0_maddr = ac_addr + 12'h800;
+    if((cur_state == LOAD_AC) & (read_cnt == ac_total_read) & (reg_block_num[8:3] != 6'b0))
+	    gen_m0_mlen = reg_block_num[8:3] - 1'b1;
+	else if(cur_state == LOAD_AC)
+	    gen_m0_mlen = 'd63;
+	else
+	    gen_m0_mlen = reg_block_size[13:6] - 1'b1;
+  end
+
+  always @(*) begin
+    if ( cur_state == LOAD_AC )
+	    gen_m0_maddr = ac_addr + 'd4096 * read_cnt;
     else
 	    gen_m0_maddr = data_out_ac ;
   end
@@ -349,7 +375,7 @@ module scatter(
   always @(*) begin
     gen_m0_mread = 0 ;
     if ( cur_state== LOAD_AC )
-		gen_m0_mread = (read_cnt < 2);
+		gen_m0_mread = (read_cnt < (ac_total_read + 1));
 	else if (cur_state == LOAD_DATA)
         gen_m0_mread = !empty_ac;
   end
