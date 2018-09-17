@@ -39,7 +39,7 @@
 #include <action_scatter_gather.h>
 #include <snap_hls_if.h>
 
-int verbose_flag = 0;
+int verbose_level = 0;
 
 static const char *version = GIT_VERSION;
 static struct timeval last_time, curr_time;
@@ -69,6 +69,29 @@ static struct timeval last_time, curr_time;
 			printf(fmt, ## __VA_ARGS__);	\
 	} while (0)
 
+
+static void print_humanread_size(uint64_t in)
+{
+	uint64_t G, M, K;
+
+	G = in / (1024*1024*1024);
+	in = in - G*1024*1024*1024;
+
+	M = in / (1024*1024);
+	in = in - M*1024*1024;
+
+	K = in / 1024;
+	in = in - K*1024;
+
+	if(G)
+		VERBOSE0("%ld GiB ", G);
+	if(M)
+		VERBOSE0("%ld MiB ", M);
+	if(K)
+		VERBOSE0("%ld KiB ", K);
+	if(in)
+		VERBOSE0("%ld Bytes ", in);
+}
 
 /*
 static void *memcpy_from_volatile(void *dest, volatile void *src, size_t n)
@@ -113,6 +136,11 @@ static void usage(const char *prog)
 	"                            1: FPGA fetches scattered memory blocks directly. \n"
 	"  -n, --num                 How many small blocks (<=4096)\n"
 	"  -s, --size_scatter        Size of each scattered block (Total Bytes <= 2MiB)\n"
+	"  -R, --rand_order          -R: Randomly choose 'num' blocks from 'K*num' blocks.\n"
+        "     	                     Default(no -R): transfer 'num' blocks sequentially. K is forced to be 1. \n"
+	"  -K,  (1,...,8192)         Make a wider memory range. Default: 1\n"
+	"                            Malloc K*'num' blocks, and just pick up 'num' blocks to tranfer.\n"
+	"  -W, --whole               Malloc a whole block (num*size_scatter)\n"
 	"  -I, --irq                 Use Interrupts (not suggested)\n"
 	"\n"
 	"Example on a real card:\n"
@@ -139,11 +167,11 @@ static inline void print_timestamp(const char * msg)
 static void snap_prepare_scatter_gather(struct snap_job *cjob,
 				 struct scatter_gather_job *mjob_in,
 				 struct scatter_gather_job *mjob_out,
-				 // Software-Hardware Interface
+      			 // Software-Hardware Interface
 				 uint64_t WED_addr,
 				 uint64_t ST_addr)
 {
-//	fprintf(stderr, "  prepare scatter_gather job of %ld bytes size\n", sizeof(*mjob_in));
+	fprintf(stderr, "  prepare scatter_gather job of %ld bytes size\n", sizeof(*mjob_in));
 	mjob_in->WED_addr = WED_addr;
 	mjob_in->ST_addr  = ST_addr;
 
@@ -173,18 +201,22 @@ int main(int argc, char *argv[])
 	int check_pass = 1;
 	uint16_t mode=1;
 	uint32_t size_scatter=2048;
-	uint32_t num=8;
+	uint32_t num=1024;
 	//////////////////////////////////////////////////
 	// Prepare the scattered blocks
 	//////////////////////////////////////////////////
 	
-	uint32_t i, j;
+	uint32_t i, j, s;
+	int K = 1;
+	int rand_order = 0;
+	int whole = 0;
 
+	int32_t *rand_order_array;
 	int32_t *gather_ptr;
 	int32_t *result_ptr_golden;
 	int32_t *result_ptr;
 	int32_t **scatter_ptr_list;
-	ssize_t *scatter_size_list;
+	//ssize_t *scatter_size_list;
 	as_pack_t *as_pack;
 
 	wed_t   *wed_ptr = NULL;
@@ -200,6 +232,9 @@ int main(int argc, char *argv[])
 			{ "mode", 	 required_argument, NULL, 'm' },
 			{ "size", 	 required_argument, NULL, 's' },
 			{ "num", 	 required_argument, NULL, 'n' },
+			{ "K",	 	 required_argument, NULL, 'K' },
+			{ "rand_order",	 no_argument,	    NULL, 'R' },
+			{ "whole",	 no_argument,	    NULL, 'W' },
 			{ "irq",	 no_argument,	    NULL, 'I' },
 			{ "version",	 no_argument,	    NULL, 'V' },
 			{ "verbose",	 no_argument,	    NULL, 'v' },
@@ -208,7 +243,7 @@ int main(int argc, char *argv[])
 		};
 
 		ch = getopt_long(argc, argv,
-                                 "C:t:m:s:n:IVvh",
+                                 "C:t:m:s:n:K:WRIVvh",
 				 long_options, &option_index);
 		if (ch == -1)
 			break;
@@ -229,6 +264,15 @@ int main(int argc, char *argv[])
                 case 'n':
                         num = strtol(optarg, (char **)NULL, 0);
                         break;		
+                case 'K':
+                        K = strtol(optarg, (char **)NULL, 0);
+                        break;		
+                case 'R':
+                        rand_order = 1;
+                        break;
+                case 'W':
+                        whole = 1;
+                        break;
                 case 'I':
                         action_irq = 1;
                         break;
@@ -237,7 +281,7 @@ int main(int argc, char *argv[])
 			printf("%s\n", version);
 			exit(EXIT_SUCCESS);
 		case 'v':
-			verbose_flag ++;
+			verbose_level ++;
 			break;
 		case 'h':
 			usage(argv[0]);
@@ -264,27 +308,75 @@ int main(int argc, char *argv[])
 	// Timer starts
 	gettimeofday(&curr_time, NULL);
 
+	if(rand_order == 0) {
+		VERBOSE0("Force K=1. All small blocks are in sequence\n");
+		K = 1;
+	}
+
 	/////////////////////////////////////////////////////////////////////////////////
 	// Allocate memories
-	scatter_size_list = snap_malloc(sizeof(size_t) * num);
-	scatter_ptr_list = snap_malloc(sizeof(int32_t *) * num);
+	//scatter_size_list = snap_malloc(sizeof(size_t) * num);
+	
+	rand_order_array = snap_malloc(sizeof(int32_t) * num);
+	scatter_ptr_list = snap_malloc(K*sizeof(int32_t *) * num);
 	result_ptr_golden = snap_malloc(size_scatter * num);
 	result_ptr = snap_malloc(size_scatter * num);
 	gather_ptr = snap_malloc(size_scatter * num);
 	as_pack = snap_malloc(num*sizeof(as_pack_t));
 
 
-	for (i = 0; i < num; i++) {
-		scatter_size_list[i] = size_scatter;
-	}
-	for (i = 0; i < num; i++) {
-		scatter_ptr_list[i] = snap_malloc(scatter_size_list[i]);
-		for (j = 0; j < size_scatter/sizeof(uint32_t); j++)
-			scatter_ptr_list[i][j] = rand()&0xFF;
-		as_pack[i].addr = (unsigned long long ) scatter_ptr_list[i]; //8B
+	//for (i = 0; i < num; i++) {
+	//	scatter_size_list[i] = size_scatter;
+	//}
 
-		//Copy the golden gathered block
-		memcpy(result_ptr_golden + i * size_scatter/sizeof(uint32_t), scatter_ptr_list[i], size_scatter);
+	//Malloc scattered blocks in a bigger range, decided by K
+	for (i = 0; i < num * K; i++) {
+		scatter_ptr_list[i] = memalign(128, size_scatter); //128 is CACHELINE
+		//scatter_ptr_list[i] = snap_malloc(size_scatter); //aligned to page_size
+	}
+
+	VERBOSE1("Print some addresses ............ \n");
+
+	for (i = 0; i < num; i++) {
+
+		if (rand_order)
+			j = rand()%(num * K); 
+		else
+			j = i;
+
+		rand_order_array[i] = j;
+		
+		
+		//Initialize the scattered blocks
+		for (s = 0; s < size_scatter/sizeof(uint32_t); s++)
+		{
+			scatter_ptr_list[j][s] = rand()&0xFF;
+		}
+
+
+		//Fill the address of scattered blocks to AddrSet
+		if (whole)
+			as_pack[i].addr = (unsigned long long ) (result_ptr_golden + i*size_scatter/sizeof(uint32_t)); 
+		else
+			as_pack[i].addr = (unsigned long long ) scatter_ptr_list[j]; //8B
+		
+
+
+
+		//Print addresses for checking. (part of them)
+		if (i >= 996 )
+		{
+			VERBOSE1("%5d: 0x%016lx", i, as_pack[i].addr);
+			if(i %6 == 5)
+				VERBOSE1("\n");
+		}
+	}
+	VERBOSE1("\n");
+
+	for (i = 0; i < num; i++)
+	{
+		//Copy to the golden gathered block
+		memcpy(result_ptr_golden + i * size_scatter/sizeof(uint32_t), scatter_ptr_list[rand_order_array[i]], size_scatter);
 	}
 
 
@@ -297,7 +389,7 @@ int main(int argc, char *argv[])
 	memset(status_ptr, 0, 128);
 	
 	/* Display the parameters that will be used for the example */
-	VERBOSE0("PARAMETERS:\n"
+	VERBOSE2("PARAMETERS:\n"
 		 " gather @ %p\n"
 		 " golden @ %p\n"
 		 " result @ %p\n",
@@ -306,8 +398,15 @@ int main(int argc, char *argv[])
 		 result_ptr);
 
 	VERBOSE0("Mode = %d\n", mode);
-	VERBOSE0("Num = %d\n", num);
-	VERBOSE0("Size_scatter = %d\n", size_scatter);
+	VERBOSE0("Num = %d, Size for each block is %d\n", num, size_scatter);
+	VERBOSE0("K = %d\n", K);
+	if(rand_order)
+	{
+		VERBOSE0("Blocks are randomly distributed in ");
+		print_humanread_size((uint64_t)K*(uint64_t)num*(uint64_t)size_scatter);
+		VERBOSE0("\n");
+	}
+	VERBOSE0("Page size = %ld\n", sysconf(_SC_PAGESIZE));
 	
 
 	wed_ptr->mode = mode;
@@ -320,6 +419,8 @@ int main(int argc, char *argv[])
 	wed_ptr->AS_size = size_scatter;
 	
 	print_timestamp("Allocate and prepare buffers");
+
+
 
 	/////////////////////////////////////////////////////////////////////////////////
 	// Open the card
@@ -352,13 +453,13 @@ int main(int argc, char *argv[])
 
 	print_timestamp("SNAP prepare job_t structure");
 
-	//Write the registers into the FPGA's action
+        //Write the registers into the FPGA's action
 	rc = snap_action_sync_execute_job_set_regs(action, &cjob);
 	if (rc != 0)
 		goto out_error2;
 
-
 	print_timestamp("Use MMIO to transfer the parameters");
+
 
 	/////////////////////////////////////////////////////////////////////////////////
 	//  Copy starts
@@ -366,11 +467,13 @@ int main(int argc, char *argv[])
 	if ((mode & 0x1) == 0) {
 		//Software collects the blocks first. 
 		for(i = 0; i < num; i++) {
-			memcpy(gather_ptr + i * size_scatter/sizeof(uint32_t), scatter_ptr_list[i], size_scatter);
+			memcpy(gather_ptr + i * size_scatter/sizeof(uint32_t), scatter_ptr_list[rand_order_array[i]], size_scatter);
 		}
 		print_timestamp("Software gathers blocks");
 	}
-	// Start Action
+	
+	VERBOSE0("==================== Starting Action  ==================\n");
+	
 	snap_action_start(action);
 	print_timestamp("Use MMIO to kick off \"Action Start\"");
 
@@ -378,6 +481,9 @@ int main(int argc, char *argv[])
 	// stop the action if not done and read all registers from the action
 	// rc = snap_action_sync_execute_job_check_completion(action, &cjob,
 	//			timeout);
+
+
+
 
 	//Just check stop bit and don't read registers
 	snap_action_completed(action, &rc, timeout);
@@ -397,7 +503,7 @@ int main(int argc, char *argv[])
 		for (i = 0; i < num *  size_scatter/sizeof(uint32_t); i++) {
 			if (result_ptr[i] != result_ptr_golden[i])
 			{
-				VERBOSE0("ERROR, compare mismatch at %d, (%d <> %d)\n", i,
+				VERBOSE0("ERROR, compare mismatch at %d, (%x <> %x)\n", i,
 						result_ptr[i], result_ptr_golden[i]);
 				check_pass = 0;
 				break;
@@ -407,36 +513,36 @@ int main(int argc, char *argv[])
 			VERBOSE0("Checking Passed.\n");
 	}
 
-	//Check return code
-	switch(cjob.retc) {
-	case SNAP_RETC_SUCCESS:
-		fprintf(stdout, "SUCCESS\n");
-		break;
-//	case SNAP_RETC_TIMEOUT:
-//		fprintf(stdout, "ACTION TIMEOUT\n");
+//	//Check return code
+//	switch(cjob.retc) {
+//	case SNAP_RETC_SUCCESS:
+//		fprintf(stdout, "SUCCESS\n");
 //		break;
-	case SNAP_RETC_FAILURE:
-		fprintf(stdout, "FAILED\n");
-		fprintf(stderr, "err: Unexpected RETC=%x!\n", cjob.retc);
-		goto out_error2;
-		break;
-	default:
-		break;
-	}
+////	case SNAP_RETC_TIMEOUT:
+////		fprintf(stdout, "ACTION TIMEOUT\n");
+////		break;
+//	case SNAP_RETC_FAILURE:
+//		fprintf(stdout, "FAILED\n");
+//		fprintf(stderr, "err: Unexpected RETC=%x!\n", cjob.retc);
+//		goto out_error2;
+//		break;
+//	default:
+//		break;
+//	}
 
 	// Detach action + disallocate the card
-	printf("====================  All job finished ==================\n");
+	VERBOSE0("====================  All job finished ==================\n");
 	snap_detach_action(action);
 	print_timestamp("Detach action");
 	
 	snap_card_free(card);
 	print_timestamp("Close the card");
 
-	for(i = 0; i < num; i++) {
+	for(i = 0; i < num*K; i++) {
 		__free((uint32_t *)scatter_ptr_list[i]);
 	}
 	__free(scatter_ptr_list);
-	__free(scatter_size_list);
+	//__free(scatter_size_list);
 	__free(result_ptr_golden);
 	__free(result_ptr);
 	__free(gather_ptr);
@@ -448,10 +554,10 @@ int main(int argc, char *argv[])
 	snap_detach_action(action);
  out_error1:
 	snap_card_free(card);
-	for(i = 0; i < num; i++)
+	for(i = 0; i < num*K; i++)
 		__free(scatter_ptr_list[i]);
 	__free(scatter_ptr_list);
-	__free(scatter_size_list);
+	//__free(scatter_size_list);
 	__free(result_ptr_golden);
 	__free(result_ptr);
 	__free(as_pack);
