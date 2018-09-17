@@ -31,10 +31,15 @@ extern "C" {
 #define ST_READ_DATA_DONE 5
 #define ST_DONE 6
 
-#define ADDR0 0x30
-#define ADDR1 0x34
-#define ADDR2 0x38
-#define ADDR3 0x3C
+#define ADDR0_ACADDR0   0x30
+#define ADDR1_ACADDR1   0x34
+#define ADDR2_START     0x38
+#define ADDR3_DONE      0x3C
+#define ADDR4_MODE      0x40
+#define ADDR5_BLOCKSIZE 0x44
+#define ADDR6_BLOCKNUM  0x48
+#define ADDR7_WBADDR0   0x4C
+#define ADDR8_WBADDR1   0x50
     
 	
 typedef struct __attribute__ ((__packed__)) as_pack {

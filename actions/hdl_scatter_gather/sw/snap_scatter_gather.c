@@ -475,10 +475,12 @@ int main(int argc, char *argv[])
 	
     VERBOSE0("==================== Starting Action  ==================\n");
     ///////////////////////
-    snap_mmio_write32(card, (uint64_t)ADDR0, 	wed_ptr->AS_addr >> 32);
-    snap_mmio_write32(card, (uint64_t)ADDR1, 	wed_ptr->AS_addr & 0xFFFFFFFF);
-    snap_mmio_write32(card, (uint64_t)ADDR2, 	0x00000001);
-    print_timestamp("Use MMIO to transfer the parameters");
+    snap_mmio_write32(card, (uint64_t)ADDR0_ACADDR0, 	wed_ptr->AS_addr >> 32);
+    snap_mmio_write32(card, (uint64_t)ADDR1_ACADDR1, 	wed_ptr->AS_addr & 0xFFFFFFFF);
+    snap_mmio_write32(card, (uint64_t)ADDR5_BLOCKSIZE, 	size_scatter);
+    snap_mmio_write32(card, (uint64_t)ADDR6_BLOCKNUM, 	num);
+    snap_mmio_write32(card, (uint64_t)ADDR2_START,  	0x00000001);
+	print_timestamp("Use MMIO to transfer the parameters");
 	
 //    snap_action_start(action);
 //	print_timestamp("Use MMIO to kick off \"Action Start\"");
@@ -493,7 +495,7 @@ int main(int argc, char *argv[])
     do {
         //int rc;
         uint32_t data;
-        rc = snap_mmio_read32(card, (uint64_t)ADDR3, &data);
+        rc = snap_mmio_read32(card, (uint64_t)ADDR3_DONE, &data);
         if (data == 1) {
             VERBOSE0 ("scatter done!\n");
             break;
