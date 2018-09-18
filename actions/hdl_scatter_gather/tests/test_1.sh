@@ -37,10 +37,11 @@ function usage() {
     echo "    [-n num]  num of blocks"
     echo "    [-s scatter_size] scatter_size: how many bytes in a block"
     echo "    [-I] enable interrupt"
+    echo "    [-v] verbose"
     echo
 }
 
-while getopts ":C:t:d:n:s:Ih" opt; do
+while getopts ":C:t:d:n:s:Ivh" opt; do
     case $opt in
 	C)
 	snap_card=$OPTARG;
@@ -59,6 +60,9 @@ while getopts ":C:t:d:n:s:Ih" opt; do
 	;;
 	I)
 	interrupt=1;
+	;;
+	v)
+	verbose=1;
 	;;
 	h)
 	usage;
@@ -100,16 +104,21 @@ else
 fi
 echo "Run $tests tests for each testpoint. (num = $num, scatter_size = $scatter_size)"
 
-args=("-W" "-K1" "-RK1" "-RK4" "-RK16" "-RK64" "-RK256" "-RK2048")
+args=("-K1" "-K4" "-K16" "-K64" "-K256" "-K1024" "-K4096" "-K16384"\
+      "-RK1" "-RK4" "-RK16" "-RK64" "-RK256" "-RK1024" "-RK4096" "-RK16384")
 #args=("-W" " " "-RK4" "-RK16" "-RK64" "-RK256" "-RK2048" "-RK8192")
 
 for arg in ${args[*]} ; do
     echo "Testpoint: -n$num -s$scatter_size $arg" >> snap_scatter_gather.log 
     for i in $(seq 1 ${tests}) ; do
-    echo -n "Run $i: "
+	if [ $verbose -eq 1 ]; then
+		echo -n "Run $i: "
+	fi
 	cmd="snap_scatter_gather -C${snap_card} -n$num -s$scatter_size $arg \
 			>> snap_scatter_gather.log 2>&1"
-	echo -n "$cmd ..."
+	if [ $verbose -eq 1 ]; then
+		echo -n "$cmd ..."
+	fi
 
 	echo "$cmd" >> snap_scatter_gather.log
 	eval ${cmd}
@@ -121,7 +130,9 @@ for arg in ${args[*]} ; do
 		echo "failed"
 		exit 1
 	fi
-	echo "ok"
+	if [ $verbose -eq 1 ]; then
+		echo "ok"
+	fi
     done
 done
 

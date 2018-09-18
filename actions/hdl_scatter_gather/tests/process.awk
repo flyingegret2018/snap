@@ -38,7 +38,7 @@ END {
   error=0
 
   printf "---------------------- Process %s Testpoints (Each has %s logs) -------------------------\n", tp, iter
-  printf "                       (time in usec)\n"
+  printf "                                            (time in usec)\n"
   while (t <= tp) {
 	i=1
 	min = usec_table[t][1]
@@ -51,9 +51,9 @@ END {
 		i++
 	}
 	average = sum/iter
-	printf "%s-%-40s:", t, tp_name[t]
+	printf "%2s-%-40s:", t, tp_name[t]
 
-	printf " average: %-8s (min: %-8s max: %-8s)\n", average, min, max
+	printf " average: %-5s (min: %-5s max: %-5s)\n", average, min, max
 	t++
   }
 		
