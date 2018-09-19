@@ -467,6 +467,9 @@ int main(int argc, char *argv[])
     ///////////////////////
     snap_mmio_write32(card, (uint64_t)ADDR0_ACADDR0, 	wed_ptr->AS_addr >> 32);
     snap_mmio_write32(card, (uint64_t)ADDR1_ACADDR1, 	wed_ptr->AS_addr & 0xFFFFFFFF);
+    snap_mmio_write32(card, (uint64_t)ADDR9_GADDR0, 	wed_ptr->G_addr >> 32);
+    snap_mmio_write32(card, (uint64_t)ADDR10_GADDR1, 	wed_ptr->G_addr & 0xFFFFFFFF);
+    snap_mmio_write32(card, (uint64_t)ADDR4_MODE, 	(uint32_t)mode);
     snap_mmio_write32(card, (uint64_t)ADDR5_BLOCKSIZE, 	size_scatter);
     snap_mmio_write32(card, (uint64_t)ADDR6_BLOCKNUM, 	num);
     snap_mmio_write32(card, (uint64_t)ADDR2_START,  	0x00000001);

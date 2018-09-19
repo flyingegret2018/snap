@@ -40,6 +40,8 @@ extern "C" {
 #define ADDR6_BLOCKNUM  0x48
 #define ADDR7_WBADDR0   0x4C
 #define ADDR8_WBADDR1   0x50
+#define ADDR9_GADDR0    0x54
+#define ADDR10_GADDR1   0x58
     
 	
 typedef struct __attribute__ ((__packed__)) as_pack {
