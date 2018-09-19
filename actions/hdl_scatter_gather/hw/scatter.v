@@ -92,7 +92,8 @@ module scatter(
 		       ADDR_WB_ADDR0                 = 19     ,
 		       ADDR_WB_ADDR1                 = 20     ,
 		       ADDR_G_ADDR0                  = 21     ,
-		       ADDR_G_ADDR1                  = 22     ;
+		       ADDR_G_ADDR1                  = 22     ,
+		       ADDR_G_SIZE                   = 23     ;
 
   parameter    IDLE                 = 0               ,
                LOAD_AC              = 1               ,
@@ -172,15 +173,17 @@ module scatter(
   reg    [31                : 0]    reg_wb_addr1      ;
   reg    [31                : 0]    reg_g_addr0       ;
   reg    [31                : 0]    reg_g_addr1       ;
+  reg    [31                : 0]    reg_g_size        ;
 
-  reg    [1                 : 0]    cur_state         ;
-  reg    [1                 : 0]    nxt_state         ;
+  reg    [2                 : 0]    cur_state         ;
+  reg    [2                 : 0]    nxt_state         ;
   reg    [AXI_AW-1          : 0]    gen_m0_maddr      ;        
   reg                               gen_m0_mread      ;
   reg    [7                 : 0]    gen_m0_mlen       ;
   reg    [13                : 0]    ac_cnt            ;
   reg    [4                 : 0]    read_cnt          ;
   reg    [9                 : 0]    soft_cnt          ;
+  wire   [9                 : 0]    soft_total        ;
   wire   [AXI_AW-1          : 0]    ac_addr           ;
   wire   [AXI_AW-1          : 0]    g_addr            ;
   wire   [4                 : 0]    ac_total_read     ;
@@ -224,6 +227,7 @@ module scatter(
 						  reg_wb_addr1    <= 'd0 ;
 						  reg_g_addr0     <= 'd0 ;
 						  reg_g_addr1     <= 'd0 ;
+						  reg_g_size      <= 'd0 ;
     end
     else if(s_axi_awvalid & s_axi_awready) begin
       case(s_axi_awaddr[6:2])
@@ -236,11 +240,13 @@ module scatter(
         ADDR_WB_ADDR1   : reg_wb_addr1    <= s_axi_wdata ;
         ADDR_G_ADDR0    : reg_g_addr0     <= s_axi_wdata ;
         ADDR_G_ADDR1    : reg_g_addr1     <= s_axi_wdata ;
+        ADDR_G_SIZE     : reg_g_size      <= s_axi_wdata ;
       endcase
     end
   end
 
   assign ac_total_read = (reg_block_num - 1)/512;
+  assign soft_total    = reg_g_size[21:12];
 
   always @(*) begin
                         s_axi_rdata = 0              ;
@@ -323,7 +329,7 @@ module scatter(
                 nxt_state = DONE;
               else                    
                 nxt_state = LOAD_DATA;
-	  LOAD_SOFT :  if( soft_cnt == 'd512 )
+	  LOAD_SOFT :  if( soft_cnt == soft_total )
 	            nxt_state = DONE;
 	          else
 			    nxt_state = LOAD_SOFT;
@@ -403,7 +409,7 @@ module scatter(
         if (cur_state == LOAD_AC)
 		    gen_m0_mread = (read_cnt < (ac_total_read + 1));
 		else if (cur_state == LOAD_SOFT)
-	        gen_m0_mread = (soft_cnt < 'd512);
+	        gen_m0_mread = (soft_cnt < soft_total);
 	    else if (cur_state == LOAD_DATA)
             gen_m0_mread = !empty_ac;
     end

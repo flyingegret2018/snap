@@ -42,6 +42,7 @@ extern "C" {
 #define ADDR8_WBADDR1   0x50
 #define ADDR9_GADDR0    0x54
 #define ADDR10_GADDR1   0x58
+#define ADDR11_GSIZE    0x5C
     
 	
 typedef struct __attribute__ ((__packed__)) as_pack {
