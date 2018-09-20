@@ -134,8 +134,8 @@ static void usage(const char *prog)
 	"  -v, --verbose             Print timers for how long each job takes\n"
 	"  -m, --mode                0: SW collects scattered memory blocks and send to FPGA. \n"
 	"                            1: FPGA fetches scattered memory blocks directly. \n"
-	"  -n, --num                 How many small blocks (<=4096)\n"
-	"  -s, --size_scatter        Size of each scattered block (Total Bytes <= 2MiB)\n"
+	"  -n, --num                 How many small blocks (<=16384)\n"
+	"  -s, --size_scatter        Size of each scattered block (Total Bytes <= 8MiB)\n"
 	"  -R, --rand_order          -R: Randomly choose 'num' blocks from 'K*num' blocks.\n"
         "     	                     Default(no -R): transfer 'num' blocks sequentially. K is forced to be 1. \n"
 	"  -K,  (1,...,8192)         Make a wider memory range. Default: 1\n"
@@ -292,7 +292,7 @@ int main(int argc, char *argv[])
 		exit(EXIT_FAILURE);
 	}
 
-	if(mode >= 4 || num > 16384 || num*size_scatter > 2*1024*1024) {
+	if(mode >= 4 || num > 16384 || num*size_scatter > 8*1024*1024) {
 		VERBOSE0("illegal arguments.\n");
 		usage(argv[0]);
 		exit(EXIT_FAILURE);
@@ -467,6 +467,10 @@ int main(int argc, char *argv[])
     ///////////////////////
     snap_mmio_write32(card, (uint64_t)ADDR0_ACADDR0, 	wed_ptr->AS_addr >> 32);
     snap_mmio_write32(card, (uint64_t)ADDR1_ACADDR1, 	wed_ptr->AS_addr & 0xFFFFFFFF);
+    snap_mmio_write32(card, (uint64_t)ADDR9_GADDR0, 	wed_ptr->G_addr >> 32);
+    snap_mmio_write32(card, (uint64_t)ADDR10_GADDR1, 	wed_ptr->G_addr & 0xFFFFFFFF);
+    snap_mmio_write32(card, (uint64_t)ADDR11_GSIZE, 	wed_ptr->G_size);
+    snap_mmio_write32(card, (uint64_t)ADDR4_MODE, 	(uint32_t)mode);
     snap_mmio_write32(card, (uint64_t)ADDR5_BLOCKSIZE, 	size_scatter);
     snap_mmio_write32(card, (uint64_t)ADDR6_BLOCKNUM, 	num);
     snap_mmio_write32(card, (uint64_t)ADDR2_START,  	0x00000001);
