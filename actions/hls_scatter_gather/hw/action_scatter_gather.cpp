@@ -24,12 +24,13 @@
 #include "action_scatter_gather.H"
 
 #define BS (BPERDW/sizeof(uint32_t))
+#define NUM_MAX 16384
 //USE MAX
 // NUM <= 4096
 // NUM * SIZE_SCATTER <= 2M
 snap_membus_t   blockram[1024*2048/BPERDW];
-snap_membus_t   as_ram[4096*8/BPERDW];
-uint64_t idx_ram[4096];
+snap_membus_t   as_ram[NUM_MAX*8/BPERDW];
+uint64_t idx_ram[NUM_MAX];
 
 
 static void read_scattered_mem(snap_membus_t *din_gmem, uint64_t * idx_ram, uint32_t num, uint32_t size_scatter)
@@ -164,12 +165,12 @@ void hls_action(snap_membus_t *din_gmem,
 	//num_read_outstanding=16  num_write_outstanding=16 latency=100 \
 	//
 #pragma HLS INTERFACE m_axi port=din_gmem bundle=host_mem offset=slave depth=512 \
-	num_read_outstanding=32  num_write_outstanding=32 latency=100 \
+	num_read_outstanding=64  num_write_outstanding=64 latency=256 \
 	max_read_burst_length=64  max_write_burst_length=64
 #pragma HLS INTERFACE s_axilite port=din_gmem bundle=ctrl_reg offset=0x030
 
 #pragma HLS INTERFACE m_axi port=dout_gmem bundle=host_mem offset=slave depth=512 \
-	num_read_outstanding=32  num_write_outstanding=32 latency=100 \
+	num_read_outstanding=64  num_write_outstanding=64 latency=256 \
 	max_read_burst_length=64  max_write_burst_length=64
 #pragma HLS INTERFACE s_axilite port=dout_gmem bundle=ctrl_reg offset=0x040
 
