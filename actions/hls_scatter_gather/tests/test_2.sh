@@ -104,8 +104,10 @@ else
 fi
 echo "Run $tests tests for each testpoint. (num = $num, scatter_size = $scatter_size)"
 
-args=("-K1" "-RK1" "-RK4" "-RK16" "-RK64" "-RK256" "-RK1024" "-RK4096" "-RK16384" \
-	"-m0K1" "-m0RK1" "-m0RK4" "-m0RK16" "-m0RK64" "-m0RK256" "-m0RK1024" "-m0RK4096" "-m0RK16384")
+args=("-K1" "-K4" "-K16" "-K64" "-K256" "-K1024" "-K4096" "-K16384" \
+      "-m0K1" "-m0K4" "-m0K16" "-m0K64" "-m0K256" "-m0K1024" "-m0K4096" "-m0K16384" \
+      "-RK1" "-RK4" "-RK16" "-RK64" "-RK256" "-RK1024" "-RK4096" "-RK16384" \
+      "-m0RK1" "-m0RK4" "-m0RK16" "-m0RK64" "-m0RK256" "-m0RK1024" "-m0RK4096" "-m0RK16384")
 #args=("-W" " " "-RK4" "-RK16" "-RK64" "-RK256" "-RK2048" "-RK8192")
 
 for arg in ${args[*]} ; do
@@ -114,6 +116,7 @@ for arg in ${args[*]} ; do
 	if [ $verbose -eq 1 ]; then
 		echo -n "Run $i: "
 	fi
+#eval "echo 3 > /proc/sys/vm/drop_caches" 
 	cmd="snap_scatter_gather -C${snap_card} -n$num -s$scatter_size $arg \
 			>> snap_scatter_gather.log 2>&1"
 	if [ $verbose -eq 1 ]; then

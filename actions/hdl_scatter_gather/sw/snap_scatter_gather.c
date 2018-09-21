@@ -214,6 +214,7 @@ int main(int argc, char *argv[])
 	int32_t *result_ptr;
 	int32_t **scatter_ptr_list;
 	int32_t *mem_pool=NULL;
+	int32_t *mem_no_use=NULL;
 	//ssize_t *scatter_size_list;
 	as_pack_t *as_pack;
 
@@ -324,7 +325,6 @@ int main(int argc, char *argv[])
 	//}
 
 	//Malloc scattered blocks in a bigger range, decided by K
-	VERBOSE0("before malloc\n");
 	mem_pool = snap_malloc((uint64_t)K*(uint64_t)num*(uint64_t)size_scatter);
 	if(mem_pool == NULL)
 	{
@@ -340,7 +340,6 @@ int main(int argc, char *argv[])
 		else
 			j = i * K;
 
-
 		scatter_ptr_list[i] = (int32_t *)((unsigned long long)mem_pool + j*size_scatter);
 
 		//Initialize the scattered blocks
@@ -349,9 +348,9 @@ int main(int argc, char *argv[])
 			scatter_ptr_list[i][s] = rand()&0xFF;
 		}
 
-		as_pack[i].addr = (unsigned long long ) scatter_ptr_list[i]; //8B
-		
 
+		//Fill the address of scattered blocks to AddrSet
+		as_pack[i].addr = (unsigned long long ) scatter_ptr_list[i]; //8B
 
 
 		//Print addresses for checking. (part of them)
@@ -407,6 +406,10 @@ int main(int argc, char *argv[])
 	wed_ptr->AS_size = size_scatter;
 	
 	print_timestamp("Allocate and prepare buffers");
+
+	//VERBOSE0("Try to flush the data cache by something irrelevant\n");
+	//mem_no_use = snap_malloc(16*1024*1024);
+	//memset(mem_no_use, '1', 16*1024*1024);
 
 
 
@@ -552,6 +555,7 @@ int main(int argc, char *argv[])
 
 	__free(scatter_ptr_list);
 	__free(mem_pool);
+	__free(mem_no_use);
 
 	//__free(scatter_size_list);
 	__free(result_ptr_golden);
@@ -567,6 +571,7 @@ int main(int argc, char *argv[])
 	snap_card_free(card);
  out_error0:
 	__free(mem_pool);
+	__free(mem_no_use);
 	__free(scatter_ptr_list);
 	//__free(scatter_size_list);
 	__free(result_ptr_golden);

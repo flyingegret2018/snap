@@ -68,8 +68,8 @@ END {
 	###########################
 	printf "%2s-%-40s:", t, tp_name[t]
 
-	printf " SW : %-5s (min: %-5s max: %-5s);", average_s, min_s, max_s
-	printf " HW : %-5s (min: %-5s max: %-5s)", average, min, max
+	printf " SW : %-7s (min: %-5s max: %-5s);", average_s, min_s, max_s
+	printf " HW : %-7s (min: %-5s max: %-5s)", average, min, max
 	printf " Sum: %s\n", average_s + average
 	t++
   }

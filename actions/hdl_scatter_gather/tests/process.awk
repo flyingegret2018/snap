@@ -31,6 +31,7 @@ BEGIN {
   if ($0 ~ "snap_scatter_gather")	{iter++}
    
   if ($0 ~ "Action Stop")		{usec_table[tp][iter]=$3}
+  if ($0 ~ "Software gathers")		{usec_sw[tp][iter]=$3}
 }
 END {
   i=1
@@ -38,8 +39,9 @@ END {
   error=0
 
   printf "---------------------- Process %s Testpoints (Each has %s logs) -------------------------\n", tp, iter
-  printf "                                            (time in usec)\n"
+  printf "                       (time in usec)\n"
   while (t <= tp) {
+	##############################
 	i=1
 	min = usec_table[t][1]
 	max = usec_table[t][1]
@@ -51,9 +53,24 @@ END {
 		i++
 	}
 	average = sum/iter
+	###########################
+	i=1
+	min_s = usec_sw[t][1]
+	max_s = usec_sw[t][1]
+	sum_s = 0;
+	while (i <= iter) {
+		if (usec_sw[t][i] < min_s) {min_s=usec_sw[t][i]}
+		if (usec_sw[t][i] > max_s) {max_s=usec_sw[t][i]}
+		sum_s = sum_s + usec_sw[t][i]
+		i++
+	}
+	average_s = sum_s/iter
+	###########################
 	printf "%2s-%-40s:", t, tp_name[t]
 
-	printf " average: %-5s (min: %-5s max: %-5s)\n", average, min, max
+	printf " SW : %-7s (min: %-5s max: %-5s);", average_s, min_s, max_s
+	printf " HW : %-7s (min: %-5s max: %-5s)", average, min, max
+	printf " Sum: %s\n", average_s + average
 	t++
   }
 		

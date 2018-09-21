@@ -140,7 +140,6 @@ static void usage(const char *prog)
         "     	                     Default(no -R): transfer 'num' blocks sequentially. K is forced to be 1. \n"
 	"  -K,  (1,...,8192)         Make a wider memory range. Default: 1\n"
 	"                            Malloc K*'num' blocks, and just pick up 'num' blocks to tranfer.\n"
-//	"  -W, --whole               Malloc a whole block (num*size_scatter)\n"
 	"  -I, --irq                 Use Interrupts (not suggested)\n"
 	"\n"
 	"Example on a real card:\n"
@@ -209,13 +208,14 @@ int main(int argc, char *argv[])
 	uint32_t i, j, s;
 	int K = 1;
 	int rand_order = 0;
-	//int whole = 0;
+	int completed;
 
 	int32_t *gather_ptr;
 	int32_t *result_ptr_golden;
 	int32_t *result_ptr;
 	int32_t **scatter_ptr_list;
 	int32_t *mem_pool=NULL;
+	int32_t *mem_no_use=NULL;
 	//ssize_t *scatter_size_list;
 	as_pack_t *as_pack;
 
@@ -234,7 +234,6 @@ int main(int argc, char *argv[])
 			{ "num", 	 required_argument, NULL, 'n' },
 			{ "K",	 	 required_argument, NULL, 'K' },
 			{ "rand_order",	 no_argument,	    NULL, 'R' },
-			//{ "whole",	 no_argument,	    NULL, 'W' },
 			{ "irq",	 no_argument,	    NULL, 'I' },
 			{ "version",	 no_argument,	    NULL, 'V' },
 			{ "verbose",	 no_argument,	    NULL, 'v' },
@@ -306,12 +305,10 @@ int main(int argc, char *argv[])
 	gettimeofday(&curr_time, NULL);
 
 	if(rand_order == 0) {
-		VERBOSE0("Force K=1. All small blocks are in sequence\n");
-		K = 1;
+		VERBOSE0("All small blocks are in sequence. K = %d\n", K);
 	}
 	else
 		VERBOSE0("Pick up blocks randomly. K = %d\n", K);
-
 
 	/////////////////////////////////////////////////////////////////////////////////
 	// Allocate memories
@@ -329,7 +326,6 @@ int main(int argc, char *argv[])
 	//}
 
 	//Malloc scattered blocks in a bigger range, decided by K
-	VERBOSE0("before malloc\n");
 	mem_pool = snap_malloc((uint64_t)K*(uint64_t)num*(uint64_t)size_scatter);
 	if(mem_pool == NULL)
 	{
@@ -343,11 +339,10 @@ int main(int argc, char *argv[])
 		if (rand_order)
 			j = rand()%(num * K); 
 		else
-			j = i;
-		
+			j = i * K;
 
 		scatter_ptr_list[i] = (int32_t *)((unsigned long long)mem_pool + j*size_scatter);
-		
+
 		//Initialize the scattered blocks
 		for (s = 0; s < size_scatter/sizeof(int32_t); s++)
 		{
@@ -375,7 +370,6 @@ int main(int argc, char *argv[])
 		memcpy(result_ptr_golden + i * size_scatter/sizeof(int32_t), scatter_ptr_list[i], size_scatter);
 	}
 
-
 	/////////////////////////////////////////////////////////////////////////////////
 	// WED and STATUS
 	wed_ptr = snap_malloc(sizeof(wed_t));
@@ -395,12 +389,11 @@ int main(int argc, char *argv[])
 
 	VERBOSE0("Mode = %d\n", mode);
 	VERBOSE0("Num = %d, Size for each block is %d\n", num, size_scatter);
-	if(rand_order)
-	{
-		VERBOSE0("Blocks are randomly distributed in ");
-		print_humanread_size((uint64_t)K*(uint64_t)num*(uint64_t)size_scatter);
-		VERBOSE0("\n");
-	}
+	VERBOSE0("Blocks are ");
+	VERBOSE0(rand_order? "randomly ": "sequentially ");
+	VERBOSE0("distributed in ");
+	print_humanread_size((uint64_t)K*(uint64_t)num*(uint64_t)size_scatter);
+	VERBOSE0("\n");
 	VERBOSE0("Page size = %ld\n", sysconf(_SC_PAGESIZE));
 	
 
@@ -414,6 +407,10 @@ int main(int argc, char *argv[])
 	wed_ptr->AS_size = size_scatter;
 	
 	print_timestamp("Allocate and prepare buffers");
+
+//	VERBOSE0("Try to flush the data cache by something irrelevant\n");
+//	mem_no_use = snap_malloc(16*1024*1024);
+//	memset(mem_no_use, '1', 16*1024*1024);
 
 
 
@@ -481,9 +478,13 @@ int main(int argc, char *argv[])
 
 
 	//Just check stop bit and don't read registers
-	snap_action_completed(action, &rc, timeout);
+	completed = snap_action_completed(action, &rc, timeout);
 	print_timestamp("Use MMIO to poll \"Action Stop\" bit");
 
+	if(completed == 0) {
+		fprintf(stderr, "err: action not completed. Maybe it's timeout.\n");
+		goto out_error2;
+	}
 
 	if (rc != 0) {
 		fprintf(stderr, "err: job execution %d: %s!\n", rc,
@@ -536,6 +537,7 @@ int main(int argc, char *argv[])
 
 	__free(scatter_ptr_list);
 	__free(mem_pool);
+	__free(mem_no_use);
 
 	//__free(scatter_size_list);
 	__free(result_ptr_golden);
@@ -551,6 +553,7 @@ int main(int argc, char *argv[])
 	snap_card_free(card);
  out_error0:
 	__free(mem_pool);
+	__free(mem_no_use);
 	__free(scatter_ptr_list);
 	//__free(scatter_size_list);
 	__free(result_ptr_golden);
