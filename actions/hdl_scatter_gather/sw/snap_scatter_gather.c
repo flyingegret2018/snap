@@ -134,8 +134,8 @@ static void usage(const char *prog)
 	"  -v, --verbose             Print timers for how long each job takes\n"
 	"  -m, --mode                0: SW collects scattered memory blocks and send to FPGA. \n"
 	"                            1: FPGA fetches scattered memory blocks directly. \n"
-	"  -n, --num                 How many small blocks (<=4096)\n"
-	"  -s, --size_scatter        Size of each scattered block (Total Bytes <= 2MiB)\n"
+	"  -n, --num                 How many small blocks (<=16384)\n"
+	"  -s, --size_scatter        Size of each scattered block (Total Bytes <= 8MiB)\n"
 	"  -R, --rand_order          -R: Randomly choose 'num' blocks from 'K*num' blocks.\n"
         "     	                     Default(no -R): transfer 'num' blocks sequentially. K is forced to be 1. \n"
 	"  -K,  (1,...,8192)         Make a wider memory range. Default: 1\n"
@@ -293,7 +293,7 @@ int main(int argc, char *argv[])
 		exit(EXIT_FAILURE);
 	}
 
-	if(mode >= 4 || num > 16384 || num*size_scatter > 2*1024*1024) {
+	if(mode >= 4 || num > 16384 || num*size_scatter > 8*1024*1024) {
 		VERBOSE0("illegal arguments.\n");
 		usage(argv[0]);
 		exit(EXIT_FAILURE);
